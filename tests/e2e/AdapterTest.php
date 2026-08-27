@@ -163,6 +163,7 @@ class AdapterTest extends TestCase
             $connack = Packet::parse($v3->receive());
             $this->assertSame(Packet::CONNACK, $connack->type);
             $this->assertSame(V3::RETURN_NOT_AUTHORIZED, ord($connack->body[1]));
+            $this->assertNull($v3->receive()); // observe the server-side close
             $this->assertFalse($v3->isConnected());
         });
     }
