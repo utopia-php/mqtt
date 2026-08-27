@@ -93,13 +93,14 @@ class Client
 
         $data = $this->client->recv($this->timeout);
 
-        if ($data === false) {
+        // Swoole's Coroutine\Client returns '' when the peer closes the connection,
+        // and false on a receive timeout (the connection stays open).
+        if ($data === '') {
             $this->handleClose();
             return null;
         }
 
-        if ($data === '') {
-            // Receive timeout: keep the connection open.
+        if ($data === false) {
             return null;
         }
 
@@ -114,12 +115,13 @@ class Client
             try {
                 $data = $this->client->recv($this->timeout);
 
-                if ($data === false) {
+                // '' is a peer close; false is a receive timeout — keep listening.
+                if ($data === '') {
                     $this->handleClose();
                     break;
                 }
 
-                if ($data === '') {
+                if ($data === false) {
                     continue;
                 }
 
