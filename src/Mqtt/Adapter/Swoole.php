@@ -24,6 +24,12 @@ class Swoole extends Adapter
 
     public function start(): void
     {
+        // Track every connection from the moment it is established, so getConnections()
+        // includes clients that have not sent a packet yet.
+        $this->server->on('connect', function (Server $server, int $fd) {
+            self::$connections[$fd] = true;
+        });
+
         $this->server->set($this->config);
         $this->server->start();
     }
@@ -64,8 +70,6 @@ class Swoole extends Adapter
     public function onReceive(callable $callback): self
     {
         $this->server->on('receive', function (Server $server, int $fd, int $reactorId, string $data) use ($callback) {
-            self::$connections[$fd] = true;
-
             call_user_func($callback, $fd, $data);
         });
 
