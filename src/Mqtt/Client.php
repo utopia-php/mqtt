@@ -93,19 +93,35 @@ class Client
 
         $data = $this->client->recv($this->timeout);
 
-        // Swoole's Coroutine\Client returns '' when the peer closes the connection,
-        // and false on a receive timeout (the connection stays open).
+        // '' is a clean peer close (EOF).
         if ($data === '') {
             $this->handleClose();
             return null;
         }
 
+        // false is either a receive timeout (the connection stays open) or a terminal
+        // socket error such as a connection reset (report it and tear the connection down).
         if ($data === false) {
+            if ($this->timedOut()) {
+                return null;
+            }
+            $this->emit('error', new \RuntimeException(
+                "Failed to receive data: {$this->client->errCode} - {$this->client->errMsg}"
+            ));
+            $this->handleClose();
             return null;
         }
 
         $this->emit('receive', $data);
         return $data;
+    }
+
+    /** Whether the last recv() returning false was a timeout rather than a socket error. */
+    private function timedOut(): bool
+    {
+        $etimedout = defined('SOCKET_ETIMEDOUT') ? SOCKET_ETIMEDOUT : 110;
+
+        return $this->client->errCode === $etimedout;
     }
 
     /** Loop receiving packets, emitting onReceive, until the connection closes. */
@@ -115,14 +131,21 @@ class Client
             try {
                 $data = $this->client->recv($this->timeout);
 
-                // '' is a peer close; false is a receive timeout — keep listening.
+                // '' is a peer close; false is a timeout (keep listening) or a socket error.
                 if ($data === '') {
                     $this->handleClose();
                     break;
                 }
 
                 if ($data === false) {
-                    continue;
+                    if ($this->timedOut()) {
+                        continue;
+                    }
+                    $this->emit('error', new \RuntimeException(
+                        "Failed to receive data: {$this->client->errCode} - {$this->client->errMsg}"
+                    ));
+                    $this->handleClose();
+                    break;
                 }
 
                 $this->emit('receive', $data);
