@@ -3,7 +3,6 @@
 namespace Utopia\Mqtt\Adapter;
 
 use Swoole\Server;
-use Swoole\Table;
 use Utopia\Mqtt\Adapter;
 
 class Swoole extends Adapter
@@ -14,10 +13,13 @@ class Swoole extends Adapter
     protected Server $server;
 
     /**
-     * Shared connection registry, kept in a Swoole\Table so it is consistent across
-     * workers (a per-process PHP array would only see the current worker's clients).
+     * Local connection registry. The adapter runs a single worker by default, so a
+     * plain array is a complete view; an app that scales workers keeps its own
+     * authoritative connection state (as the Appwrite MQTT adapter does).
+     *
+     * @var array<int, bool>
      */
-    protected Table $connections;
+    protected array $connections = [];
 
     /** @var callable|null */
     private $onStart = null;
@@ -40,10 +42,6 @@ class Swoole extends Adapter
         $this->config['open_mqtt_protocol'] = true;
         $this->config['worker_num'] = 1;
         $this->config['max_connection'] = self::MAX_CONNECTIONS;
-
-        $this->connections = new Table(self::MAX_CONNECTIONS);
-        $this->connections->column('active', Table::TYPE_INT, 1);
-        $this->connections->create();
     }
 
     public function start(): void
@@ -53,11 +51,11 @@ class Swoole extends Adapter
         // accurate even when onClose() is never registered. The application callbacks,
         // when set, run alongside.
         $this->server->on('connect', function (Server $server, int $fd) {
-            $this->connections->set((string) $fd, ['active' => 1]);
+            $this->connections[$fd] = true;
         });
 
         $this->server->on('close', function (Server $server, int $fd) {
-            $this->connections->del((string) $fd);
+            unset($this->connections[$fd]);
 
             if ($this->onClose !== null) {
                 call_user_func($this->onClose, $fd);
@@ -152,11 +150,6 @@ class Swoole extends Adapter
 
     public function getConnections(): array
     {
-        $connections = [];
-        foreach ($this->connections as $fd => $row) {
-            $connections[] = (int) $fd;
-        }
-
-        return $connections;
+        return array_keys($this->connections);
     }
 }
