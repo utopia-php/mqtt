@@ -80,14 +80,6 @@ class Server
         return $this;
     }
 
-    /**
-     * @return array<mixed>
-     */
-    public function getConnections(): array
-    {
-        return $this->adapter->getConnections();
-    }
-
     /** Register a callback run when a transport operation throws. */
     public function error(callable $callback): self
     {

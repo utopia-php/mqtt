@@ -7,19 +7,10 @@ use Utopia\Mqtt\Adapter;
 
 class Swoole extends Adapter
 {
-    /** Upper bound on tracked connections; also Swoole's own max_connection. */
+    /** Swoole's max_connection cap. */
     private const MAX_CONNECTIONS = 100_000;
 
     protected Server $server;
-
-    /**
-     * Local connection registry. The adapter runs a single worker by default, so a
-     * plain array is a complete view; an app that scales workers keeps its own
-     * authoritative connection state (as the Appwrite MQTT adapter does).
-     *
-     * @var array<int, bool>
-     */
-    protected array $connections = [];
 
     /** @var callable|null */
     private $onStart = null;
@@ -46,17 +37,11 @@ class Swoole extends Adapter
 
     public function start(): void
     {
-        // The connection registry is maintained here, independent of the application's
-        // callbacks: connect adds and close removes, so getConnections() is always
-        // accurate even when onClose() is never registered. The application callbacks,
-        // when set, run alongside.
-        $this->server->on('connect', function (Server $server, int $fd) {
-            $this->connections[$fd] = true;
-        });
-
+        // The transport does not keep a connection registry: an application that needs
+        // one tracks connections itself (it learns of a client from the CONNECT packet
+        // via onReceive, and of a drop via onClose), keyed by whatever domain state it
+        // attaches to each fd.
         $this->server->on('close', function (Server $server, int $fd) {
-            unset($this->connections[$fd]);
-
             if ($this->onClose !== null) {
                 call_user_func($this->onClose, $fd);
             }
@@ -146,10 +131,5 @@ class Swoole extends Adapter
     public function getNative(): Server
     {
         return $this->server;
-    }
-
-    public function getConnections(): array
-    {
-        return array_keys($this->connections);
     }
 }

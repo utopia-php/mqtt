@@ -95,11 +95,6 @@ final class ServerTest extends TestCase
             {
                 return null;
             }
-
-            public function getConnections(): array
-            {
-                return [1, 2, 3];
-            }
         };
     }
 
@@ -126,13 +121,6 @@ final class ServerTest extends TestCase
         $server->onStart($noop)->onWorkerStart($noop)->onReceive($noop)->onClose($noop);
 
         $this->assertSame(['start', 'workerStart', 'receive', 'close'], array_keys($adapter->hooks));
-    }
-
-    public function testDelegatesGetConnections(): void
-    {
-        $server = new Server($this->adapter());
-
-        $this->assertSame([1, 2, 3], $server->getConnections());
     }
 
     public function testTransportErrorsAreRoutedToErrorCallbacks(): void
