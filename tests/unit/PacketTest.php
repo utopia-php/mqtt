@@ -50,6 +50,35 @@ final class PacketTest extends TestCase
         $this->assertSame(strlen($encoded), $offset);
     }
 
+    public function testFramesSplitsAStreamIntoWholePackets(): void
+    {
+        $stream = Packet::pingreq() . V3::publish('sport/tennis', 'hi', 1, 7) . Packet::pingresp();
+
+        [$packets, $rest] = Packet::frames($stream);
+
+        $this->assertSame('', $rest);
+        $this->assertCount(3, $packets);
+        $this->assertSame(Packet::PINGREQ, Packet::parse($packets[0])->type);
+        $this->assertSame(Packet::PUBLISH, Packet::parse($packets[1])->type);
+        $this->assertSame(Packet::PINGRESP, Packet::parse($packets[2])->type);
+    }
+
+    public function testFramesKeepsATrailingPartialPacketAsRemainder(): void
+    {
+        $publish = V3::publish('sport/tennis', 'hi', 1, 7);
+        $stream = Packet::pingreq() . substr($publish, 0, 3);
+
+        [$packets, $rest] = Packet::frames($stream);
+
+        $this->assertCount(1, $packets);
+        $this->assertSame(Packet::PINGREQ, Packet::parse($packets[0])->type);
+
+        // The remainder completes once the rest of the packet arrives.
+        [$next, $tail] = Packet::frames($rest . substr($publish, 3));
+        $this->assertSame('', $tail);
+        $this->assertSame(Packet::PUBLISH, Packet::parse($next[0])->type);
+    }
+
     public function testParseReadsFixedHeaderAndName(): void
     {
         $packet = Packet::parse(Packet::pingresp());
