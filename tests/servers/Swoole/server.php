@@ -45,7 +45,7 @@ $matches = function (string $filter, string $topic): bool {
     return count($f) === count($t);
 };
 
-$adapter = new Adapter\Swoole('0.0.0.0', 1883);
+$adapter = new Adapter\Swoole('0.0.0.0', 1883, 9001);
 $adapter->setWorkerNumber(1);
 
 $server = new Server($adapter);

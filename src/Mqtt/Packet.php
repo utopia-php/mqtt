@@ -43,6 +43,52 @@ class Packet
         return new self($type, $flags, $body);
     }
 
+    /**
+     * Split a byte stream into whole packets, returning them with the unconsumed remainder
+     * for the next read. Where parse() assumes one packet per read (an MQTT-framed stream),
+     * this reassembles a carrier whose reads do not align with packet boundaries, such as
+     * WebSocket. A trailing partial packet stays in the remainder.
+     *
+     * @return array{0: array<int, string>, 1: string}
+     */
+    public static function frames(string $buffer): array
+    {
+        $packets = [];
+        $length = strlen($buffer);
+        $offset = 0;
+
+        while ($length - $offset >= 2) {
+            $multiplier = 1;
+            $remaining = 0;
+            $cursor = $offset + 1;
+            $complete = false;
+
+            do {
+                if ($cursor >= $length) {
+                    break;
+                }
+                $byte = ord($buffer[$cursor]);
+                $remaining += ($byte & 0x7F) * $multiplier;
+                $multiplier *= 128;
+                $cursor++;
+                if (($byte & 0x80) === 0) {
+                    $complete = true;
+                    break;
+                }
+            } while ($cursor - $offset <= 4);
+
+            $total = ($cursor - $offset) + $remaining;
+            if (!$complete || $length - $offset < $total) {
+                break;
+            }
+
+            $packets[] = substr($buffer, $offset, $total);
+            $offset += $total;
+        }
+
+        return [$packets, substr($buffer, $offset)];
+    }
+
     public function name(): string
     {
         return match ($this->type) {
